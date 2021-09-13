@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <script src="../dist/vtf2img.js" lang="javascript"></script>
+    <style>
+      body {
+        padding: 50px;
+      }
+
+      input {
+        margin-bottom: 50px;
+      }
+
+      img {
+        max-width: 100%;
+        max-height: 100%;
+        box-sizing: border-box;
+      }
+    </style>
+  </head>
+  <body>
+    <center>
+      <input type="file" onchange="fileChange(event)">
+      <br />
+      <img id="image"></img>
+    </center>
+    <script>
+      function fileChange(event) {
+        let input = event.target;
+
+        for (let i = 0; i < input.files.length; i++) {
+          vtf2img(input.files[i]);
+        }
+      };
+
+      function vtf2img(file) {
+        let reader = new FileReader();
+        reader.onload = function () {
+          let buffer = reader.result;
+
+          let frames = Module.ccall('vtf2frames',
+            'number',
+            ['array'],
+            [new Uint8Array(buffer)]);
+
+          let width = Module.ccall('vtf2width',
+            'number',
+            ['array'],
+            [new Uint8Array(buffer)]);
+
+          let height = Module.ccall('vtf2height',
+            'number',
+            ['array'],
+            [new Uint8Array(buffer)]);
+
+          let images = [];
+
+          for (let i = 0; i < frames; i++) {
+            let vtf2rgb = Module.cwrap('vtf2rgb', '', ['array', 'number', 'number'])
+            let ptr_from_wasm = vtf2rgb(new Uint8Array(buffer), buffer.byteLength, i + 1);
+            let js_array = Module.HEAPU8.subarray(ptr_from_wasm, ptr_from_wasm + width * height * 4);
+
+            let canvas = document.createElement("canvas");
+            let ctx = canvas.getContext("2d");
+
+            canvas.width = width;
+            canvas.height = height;
+
+            let imgData = ctx.getImageData(0, 0, width, height);
+            let data = imgData.data;
+
+            for (let j = 0; j < js_array.length; j++) {
+              data[j] = js_array[j];
+            }
+
+            ctx.putImageData(imgData, 0, 0);
+
+            images.push(canvas.toDataURL())
+          }
+
+          if (images.length === 1) {
+            document.getElementById("image").src = images[0];
+          } else {
+            gifshot.createGIF({
+              'images': images
+            }, function (obj) {
+              if (!obj.error) {
+                document.getElementById("image").src = obj.image;
+              }
+            });
+          }
+        }
+
+        reader.readAsArrayBuffer(file);
+      };
+    </script>
+  </body>
+</html>
